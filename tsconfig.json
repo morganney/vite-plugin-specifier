@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    "module": "NodeNext",
+    "outDir": "dist",
+    "strict": true
+  },
+  "include": ["src"]
+}
