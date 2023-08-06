@@ -12,7 +12,7 @@ interface SpecifierOptions {
   /**
    * If `true`, default writer will be used which rewrites the updated
    * code back to the original filename in `outDir`.
-   * 
+   *
    * Otherwise, a callback will be passed a Record<string, string> of
    * { [filename: string]: updatedCode }.
    */
