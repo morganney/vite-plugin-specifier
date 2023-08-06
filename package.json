@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-specifier",
-  "version": "1.0.0-alpha.0",
+  "version": "1.0.0-alpha.1",
   "description": "Vite plugin to update your ESM or CJS specifiers.",
   "type": "module",
   "main": "dist",
@@ -33,6 +33,13 @@
   ],
   "author": "Morgan Ney <morganney@gmail.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/morganney/vite-plugin-specifier.git"
+  },
+  "bugs": {
+    "url": "https://github.com/morganney/vite-plugin-specifier/issues"
+  },
   "devDependencies": {
     "@knighted/duel": "1.0.0-rc.9",
     "@types/node": "^20.4.8",

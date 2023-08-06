@@ -29,7 +29,6 @@ And a vite.config.ts defined like :
 import { writeFile, rm } from 'node:fs/promises'
 
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
 import specifier from 'vite-plugin-specifier'
 
 import type { Spec } from 'vite-plugin-specifier'
@@ -38,14 +37,10 @@ export default defineConfig(({
   build: {
     lib: {
       formats: ['cjs', 'es'],
-      entry: ['src/rangeLine.tsx', 'src/colors.ts'],
-    },
-    rollupOptions: {
-      external: ['react', 'react-dom', 'styled-components'],
+      entry: ['src/index.ts', 'src/file.ts'],
     },
   },
   plugins: [
-    react(),
     specifier({
       // Changes all relative specifiers ending with .js to end with .mjs
       handler({ value }: Spec) {
