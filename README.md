@@ -74,7 +74,7 @@ As an example of how to use `handler` and `writer`, they can be used to create t
 The updated vite.config.ts:
 
 ```diff
-import { writeFile, rm } from 'node:fs/promises'
++import { writeFile, rm } from 'node:fs/promises'
 
 import { defineConfig } from 'vite'
 import specifier from 'vite-plugin-specifier'
@@ -88,24 +88,24 @@ export default defineConfig(({
   },
   plugins: [
     specifier({
-      extMap: {
-        '.js': '.mjs',
-      },
-      handler({ value }) {
-        if (value.startsWith('./') || value.startsWith('../')) {
-          return value.replace(/([^.]+)\.js$/, '$1.mjs')
-        }
-      },
-      async writer(records) {
-        const files = Object.keys(records)
-
-        for (const filename of files) {
-          if (typeof records[filename] === 'string' && filename.endsWith('.js')) {
-            await writeFile(filename.replace(/\.js$/, '.mjs'), records[filename])
-            await rm(filename, { force: true })
-          }
-        }
-      },
+-      extMap: {
+-        '.js': '.mjs',
+-      },
++      handler({ value }) {
++        if (value.startsWith('./') || value.startsWith('../')) {
++          return value.replace(/([^.]+)\.js$/, '$1.mjs')
++        }
++      },
++      async writer(records) {
++        const files = Object.keys(records)
++
++        for (const filename of files) {
++          if (typeof records[filename] === 'string' && filename.endsWith('.js')) {
++            await writeFile(filename.replace(/\.js$/, '.mjs'), records[filename])
++            await rm(filename, { force: true })
++          }
++        }
++      },
     }),
   ],
 }))
