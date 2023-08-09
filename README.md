@@ -155,7 +155,7 @@ type ExtMap = Map<{
 }>
 type Ext = '.js' | '.mjs' | '.cjs' | '.jsx' | '.ts' | '.mts' | '.cts' | '.tsx'
 type Map<Exts> = {
-  [Property in keyof Exts]?: Ext
+  [P in keyof Exts]?: Exts[P]
 }
 ```
 
@@ -180,13 +180,14 @@ interface Spec {
 }
 ```
 
-Allows updating of specifiers on a per-file basis, using a callback or regular expression map to determine the updated specifier values. The `Spec` used in the callback is essentially a portion of an AST node. If using a callback, the returned string determines the new specifier value.
+Allows updating of specifiers on a per-file basis, using a callback or regular expression map to determine the updated specifier values. The `Spec` used in the callback is essentially a portion of an AST node. The `handler` is passed to [`@knighted/specifier`](https://github.com/knightedcodemonkey/specifier) to get the updated specifier value.
 
 ### `writer`
 
 **type**
 ```ts
-type Writer = boolean | ((records: Record<string, string | UpdateError>) => Promise<void>)
+type Writer = ((records: BundleRecords) => Promise<void>) | boolean
+type BundleRecords = Record<string, { error: UpdateError | undefined; code: string }>
 interface UpdateError {
   error: boolean
   msg: string
@@ -194,10 +195,10 @@ interface UpdateError {
   syntaxError?: {
     code: string
     reasonCode: string
-    pos: number
-    loc: Position
   }
 }
 ```
 
-Used to modify the emitted build files, for instance to change their file extensions. Receives a record `{ [filename: string]: string | UpdateError }` mapping the filenames from the emitted build, to their updated source code string, or an object describing an error that occured.
+Used to modify the emitted build files, for instance to change their file extensions. Receives a `BundleRecords` object mapping the filenames from the emitted build, to their updated source code string, or an object describing an error that occured.
+
+Setting this option to `true` will use a default writer that writes the updated source code back to the original filename.

@@ -19,8 +19,9 @@ interface Extensions {
   '.tsx': Ext
 }
 type Map<Exts> = {
-  [Property in keyof Exts]?: Ext
+  [P in keyof Exts]?: Exts[P]
 }
+type BundleRecords = Record<string, { error: UpdateError | undefined; code: string }>
 interface SpecifierOptions {
   /**
    * Maps one extension to another in specifiers and emitted filenames.
@@ -32,10 +33,9 @@ interface SpecifierOptions {
    * If `true`, default writer will be used which rewrites the updated
    * code back to the original filename in `outDir`.
    *
-   * Otherwise, a callback will be passed a Record<string, string> of
-   * { [filename: string]: updatedCode }.
+   * Otherwise, a callback will be passed BundleRecords.
    */
-  writer?: boolean | ((records: Record<string, string>) => Promise<void>)
+  writer?: ((records: BundleRecords) => Promise<void>) | boolean
   hook?: 'writeBundle' | 'transform'
 }
 
@@ -55,24 +55,24 @@ export default function (options: SpecifierOptions): Plugin {
   return {
     name: 'specifier',
     enforce: 'post',
-    async transform(code, id) {
+    async transform(src, id) {
       if (hook === 'transform') {
         const updater = extMap ? getExtMap(extMap) : handler ?? {}
-        const update = await specifier.updateSrc(code, updater, {
+        const { code, error, map } = await specifier.updateSrc(src, updater, {
           sourceMap: true,
           dts: /\.d\.[mc]?ts$/.test(id),
         })
 
-        if (update.code) {
-          return { code: update.code, map: update.map }
+        if (code && map && !error) {
+          return { code, map }
         }
       }
 
-      return { code, map: null }
+      return { code: src, map: null }
     },
     async writeBundle({ dir }, bundle) {
       if (hook === 'writeBundle') {
-        const records: Record<string, string> = {}
+        const records: BundleRecords = {}
         const updater = extMap ? getExtMap(extMap) : handler ?? {}
         const files = Object.keys(bundle)
           .filter(filename => {
@@ -81,10 +81,11 @@ export default function (options: SpecifierOptions): Plugin {
           .map(filename => join(dir ?? `${join(cwd(), 'dist')}`, filename))
 
         for (const filename of files) {
-          const codeOrError = await specifier.update(filename, updater)
+          const update = await specifier.update(filename, updater)
 
-          if (typeof codeOrError === 'string') {
-            records[filename] = codeOrError
+          records[filename] = {
+            code: update.code ?? '',
+            error: update.error,
           }
         }
 
@@ -94,11 +95,12 @@ export default function (options: SpecifierOptions): Plugin {
           for (const filename of files) {
             const fileExt = extname(filename) as Ext
             const newExt = extMap[fileExt] ?? ''
+            const { code, error } = records[filename]
 
-            if (typeof records[filename] === 'string' && newExt) {
+            if (!error && newExt) {
               await writeFile(
                 filename.replace(new RegExp(`\\${fileExt}$`, 'i'), newExt),
-                records[filename],
+                code,
               )
               await rm(filename, { force: true })
             }
@@ -108,7 +110,9 @@ export default function (options: SpecifierOptions): Plugin {
             const files = Object.keys(records)
 
             for (const filename of files) {
-              await writeFile(filename, records[filename])
+              if (!records[filename].error) {
+                await writeFile(filename, records[filename].code)
+              }
             }
           }
 
@@ -121,4 +125,4 @@ export default function (options: SpecifierOptions): Plugin {
   }
 }
 
-export type { SpecifierOptions, Spec, RegexMap, Callback, UpdateError }
+export type { SpecifierOptions, Spec, RegexMap, Callback, UpdateError, BundleRecords }
