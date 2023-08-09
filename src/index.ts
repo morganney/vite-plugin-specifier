@@ -8,7 +8,7 @@ import { glob } from 'glob'
 import type { Plugin } from 'vite' assert { 'resolution-mode': 'import' }
 import type { Callback, RegexMap, UpdateError, Spec } from '@knighted/specifier'
 
-type Ext = '.js' | '.mjs' | '.cjs' | '.d.ts'
+type Ext = '.js' | '.mjs' | '.cjs'
 interface Extensions {
   '.js': '.mjs' | '.cjs'
   '.mjs': '.js'
@@ -18,7 +18,7 @@ interface Extensions {
   '.mts': '.mjs' | '.js'
   '.cts': '.cjs' | '.js'
   '.tsx': '.js' | '.mjs' | '.cjs'
-  '.d.ts': '.d.mts' | '.d.cts' | 'dual'
+  '.d.ts': '.mjs' | '.cjs' | 'dual'
 }
 type Map<Exts> = {
   [P in keyof Exts]?: Exts[P]
@@ -45,8 +45,10 @@ const getExtMap = (extMap: Map<Extensions>): RegexMap => {
   const map: RegexMap = {}
 
   Object.keys(extMap).forEach(ext => {
-    // Map relative specifiers ending in `ext` to their defined mapping extension
-    map[`^(\\.\\.?\\/)(.+)\\${ext}$`] = `$1$2${extMap[ext as Ext]}`
+    if (!/\.d\.ts$/i.test(ext)) {
+      // Map relative specifiers ending in `ext` to their defined mapping extension
+      map[`^(\\.\\.?\\/)(.+)\\${ext}$`] = `$1$2${extMap[ext as Ext]}`
+    }
   })
 
   return map
@@ -106,10 +108,44 @@ export default function (options: SpecifierOptions): Plugin {
             const { code, error } = records[filename]
 
             if (!error && newExt) {
-              // Check for .d.ts files being converted to .d.mts and .d.cts
+              // Check for .d.ts files being converted to .d.mts and .d.cts.
               if (newExt === 'dual') {
-                await writeFile(filename.replace(/\.d\.ts$/i, '.d.mts'), code)
-                await writeFile(filename.replace(/\.d\.ts$/i, '.d.cts'), code)
+                // Assume '.js' mapping determines target and which declaration file was already transformed if dual is used.
+                const isCjs = extMap['.js'] === '.mjs'
+                const targetExt = isCjs ? '.cjs' : '.mjs'
+                const { code: dual } = await specifier.update(filename, ({ value }) => {
+                  if (value.startsWith('./') || value.startsWith('../')) {
+                    return value.replace(/(.+)\.(?:js|mjs|cjs)$/, `$1${targetExt}`)
+                  }
+                })
+
+                if (dual) {
+                  await writeFile(
+                    filename.replace(/\.d\.ts$/i, isCjs ? '.d.cts' : '.d.mts'),
+                    dual,
+                  )
+                }
+
+                await writeFile(
+                  filename.replace(/\.d\.ts$/i, isCjs ? '.d.mts' : '.d.cts'),
+                  code,
+                )
+              } else if (fileIsDec) {
+                const update = await specifier.update(filename, ({ value }) => {
+                  if (value.startsWith('./') || value.startsWith('../')) {
+                    return value.replace(/(.+)\.(?:js|mjs|cjs)$/, `$1${newExt}`)
+                  }
+                })
+
+                if (update.code) {
+                  await writeFile(
+                    filename.replace(
+                      /\.d\.ts$/i,
+                      newExt === '.mjs' ? '.d.mts' : '.d.cts',
+                    ),
+                    update.code,
+                  )
+                }
               } else {
                 await writeFile(
                   filename.replace(
