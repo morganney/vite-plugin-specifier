@@ -3,20 +3,22 @@ import { extname, join } from 'node:path'
 import { writeFile, rm } from 'node:fs/promises'
 
 import { specifier } from '@knighted/specifier'
+import { glob } from 'glob'
 
 import type { Plugin } from 'vite' assert { 'resolution-mode': 'import' }
 import type { Callback, RegexMap, UpdateError, Spec } from '@knighted/specifier'
 
-type Ext = '.js' | '.mjs' | '.cjs' | '.jsx' | '.ts' | '.mts' | '.cts' | '.tsx'
+type Ext = '.js' | '.mjs' | '.cjs'
 interface Extensions {
-  '.js': Ext
-  '.mjs': Ext
-  '.cjs': Ext
-  '.jsx': Ext
-  '.ts': Ext
-  '.mts': Ext
-  '.cts': Ext
-  '.tsx': Ext
+  '.js': '.mjs' | '.cjs'
+  '.mjs': '.js'
+  '.cjs': '.js'
+  '.jsx': '.js' | '.mjs' | '.cjs'
+  '.ts': '.js' | '.mjs' | '.cjs'
+  '.mts': '.mjs' | '.js'
+  '.cts': '.cjs' | '.js'
+  '.tsx': '.js' | '.mjs' | '.cjs'
+  '.d.ts': '.mjs' | '.cjs' | 'dual'
 }
 type Map<Exts> = {
   [P in keyof Exts]?: Exts[P]
@@ -43,8 +45,10 @@ const getExtMap = (extMap: Map<Extensions>): RegexMap => {
   const map: RegexMap = {}
 
   Object.keys(extMap).forEach(ext => {
-    // Map relative specifiers ending in `ext` to their defined mapping extension
-    map[`^(\\.\\.?\\/)(.+)\\${ext}$`] = `$1$2${extMap[ext as Ext]}`
+    if (!/\.d\.ts$/i.test(ext)) {
+      // Map relative specifiers ending in `ext` to their defined mapping extension
+      map[`^(\\.\\.?\\/)(.+)\\${ext}$`] = `$1$2${extMap[ext as Ext]}`
+    }
   })
 
   return map
@@ -73,12 +77,17 @@ export default function (options: SpecifierOptions): Plugin {
     async writeBundle({ dir }, bundle) {
       if (hook === 'writeBundle') {
         const records: BundleRecords = {}
+        const outDir = dir ?? join(cwd(), 'dist')
         const updater = extMap ? getExtMap(extMap) : handler ?? {}
+        const dts = await glob(`${outDir}/**/*.d.ts`, {
+          ignore: 'node_modules/**',
+        })
         const files = Object.keys(bundle)
           .filter(filename => {
-            return /\.js|\.mjs|\.cjs|\.jsx|\.ts|\.mts|\.cts|\.tsx/.test(extname(filename))
+            return /\.(js|mjs|cjs|jsx|ts|mts|cts|tsx)$/.test(filename)
           })
-          .map(filename => join(dir ?? `${join(cwd(), 'dist')}`, filename))
+          .map(filename => join(outDir, filename))
+          .concat(dts)
 
         for (const filename of files) {
           const update = await specifier.update(filename, updater)
@@ -93,15 +102,63 @@ export default function (options: SpecifierOptions): Plugin {
           const files = Object.keys(records)
 
           for (const filename of files) {
-            const fileExt = extname(filename) as Ext
+            const fileIsDec = /\.d\.ts$/.test(filename)
+            const fileExt = fileIsDec ? '.d.ts' : (extname(filename) as Ext)
             const newExt = extMap[fileExt] ?? ''
             const { code, error } = records[filename]
 
             if (!error && newExt) {
-              await writeFile(
-                filename.replace(new RegExp(`\\${fileExt}$`, 'i'), newExt),
-                code,
-              )
+              // Check for .d.ts files being converted to .d.mts and .d.cts.
+              if (newExt === 'dual') {
+                // Assume '.js' mapping determines target and which declaration file was already transformed if dual is used.
+                const isCjs = extMap['.js'] === '.mjs'
+                const targetExt = isCjs ? '.cjs' : '.mjs'
+                const { code: dual } = await specifier.update(filename, ({ value }) => {
+                  if (value.startsWith('./') || value.startsWith('../')) {
+                    return value.replace(/(.+)\.(?:js|mjs|cjs)$/, `$1${targetExt}`)
+                  }
+                })
+
+                if (dual) {
+                  await writeFile(
+                    filename.replace(/\.d\.ts$/i, isCjs ? '.d.cts' : '.d.mts'),
+                    dual,
+                  )
+                }
+
+                await writeFile(
+                  filename.replace(/\.d\.ts$/i, isCjs ? '.d.mts' : '.d.cts'),
+                  code,
+                )
+              } else if (fileIsDec) {
+                const update = await specifier.update(filename, ({ value }) => {
+                  if (value.startsWith('./') || value.startsWith('../')) {
+                    return value.replace(/(.+)\.(?:js|mjs|cjs)$/, `$1${newExt}`)
+                  }
+                })
+
+                if (update.code) {
+                  await writeFile(
+                    filename.replace(
+                      /\.d\.ts$/i,
+                      newExt === '.mjs' ? '.d.mts' : '.d.cts',
+                    ),
+                    update.code,
+                  )
+                }
+              } else {
+                await writeFile(
+                  filename.replace(
+                    new RegExp(
+                      `${fileIsDec ? fileExt.split('.').join('\\.') : `\\${fileExt}`}$`,
+                      'i',
+                    ),
+                    newExt,
+                  ),
+                  code,
+                )
+              }
+
               await rm(filename, { force: true })
             }
           }

@@ -113,6 +113,69 @@ export default defineConfig(({
 
 As you can see, it's much simpler to just use `extMap` which does this for you. However, if you want to modify file extensions and/or specifiers in general (not just relative ones) after a vite build, then `handler` and `writer` are what you want.
 
+### TypeScript declaration files
+
+You can change file and relative specifier extensions in `.d.ts` files using the `extMap` option.
+
+Run `tsc` first to build your types resulting in the following `dist`:
+
+```
+.
+├── dist/
+│   ├── index.d.ts
+│   ├── file.d.ts
+├── src/
+│   ├── index.ts
+│   └── file.ts
+├── package.json
+├── tsconfig.json
+└── vite.config.ts
+```
+
+Now update your vite.config.ts to the following:
+
+```diff
+build: {
++ emptyOutDir: false,
+  lib: {
+    formats: ['es', 'cjs'],
+    entry: ['src/index.ts', 'src/file.ts'],
+  },
+},
+plugins: [
+  specifier({
+    extMap: {
+      '.js': '.mjs',
++     '.d.ts': 'dual'
+    },
+  }),
+],
+```
+
+After running the vite build, the `.d.ts` files will have been transformed twice, once to update **relative** specifiers to end with `.mjs`, and once to end with `.cjs`. Your `dist` will now contain the following:
+
+```
+.
+├── dist/
+│   ├── index.cjs
+│   ├── index.d.cts
+│   ├── index.d.mts
+│   ├── index.mjs
+│   ├── file.cjs
+│   ├── file.d.cts
+│   ├── file.d.mts
+│   └── file.mjs
+├── src/
+│   ├── index.ts
+│   └── file.ts
+├── package.json
+├── tsconfig.json
+└── vite.config.ts
+```
+
+Besides the unique value `dual`, you can also map `.d.ts` to either `.mjs` or `.cjs` if you are not running vite with multiple [`build.lib.formats`](https://vitejs.dev/config/build-options.html#build-lib). It will do what you expect, i.e. update the relative specifiers and output the declaration files with correct extensions.
+
+
 ## Options
 
 You probably won't need to use any of these except `extMap`, nevertheless, here they are. To make anything happen you need to define either `extMap`, `handler`, or `writer`.
