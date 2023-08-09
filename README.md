@@ -136,7 +136,7 @@ Now update your vite.config.ts to the following:
 
 ```diff
 build: {
-+  emptyOutDir: false,
++ emptyOutDir: false,
   lib: {
     formats: ['es', 'cjs'],
     entry: ['src/index.ts', 'src/file.ts'],
@@ -146,13 +146,13 @@ plugins: [
   specifier({
     extMap: {
       '.js': '.mjs',
-+      '.d.ts': 'dual'
++     '.d.ts': 'dual'
     },
   }),
 ],
 ```
 
-After running the vite build, the `.d.ts` files will have been transformed twice, once to update **relative** specifiers to end with `.mjs`, and once to end them in `.cjs`. Your `dist` will now contain the following:
+After running the vite build, the `.d.ts` files will have been transformed twice, once to update **relative** specifiers to end with `.mjs`, and once to end with `.cjs`. Your `dist` will now contain the following:
 
 ```
 .
