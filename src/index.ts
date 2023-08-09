@@ -3,20 +3,22 @@ import { extname, join } from 'node:path'
 import { writeFile, rm } from 'node:fs/promises'
 
 import { specifier } from '@knighted/specifier'
+import { glob } from 'glob'
 
 import type { Plugin } from 'vite' assert { 'resolution-mode': 'import' }
 import type { Callback, RegexMap, UpdateError, Spec } from '@knighted/specifier'
 
-type Ext = '.js' | '.mjs' | '.cjs' | '.jsx' | '.ts' | '.mts' | '.cts' | '.tsx'
+type Ext = '.js' | '.mjs' | '.cjs' | '.d.ts'
 interface Extensions {
-  '.js': Ext
-  '.mjs': Ext
-  '.cjs': Ext
-  '.jsx': Ext
-  '.ts': Ext
-  '.mts': Ext
-  '.cts': Ext
-  '.tsx': Ext
+  '.js': '.mjs' | '.cjs'
+  '.mjs': '.js'
+  '.cjs': '.js'
+  '.jsx': '.js' | '.mjs' | '.cjs'
+  '.ts': '.js' | '.mjs' | '.cjs'
+  '.mts': '.mjs' | '.js'
+  '.cts': '.cjs' | '.js'
+  '.tsx': '.js' | '.mjs' | '.cjs'
+  '.d.ts': '.d.mts' | '.d.cts' | 'dual'
 }
 type Map<Exts> = {
   [P in keyof Exts]?: Exts[P]
@@ -73,12 +75,17 @@ export default function (options: SpecifierOptions): Plugin {
     async writeBundle({ dir }, bundle) {
       if (hook === 'writeBundle') {
         const records: BundleRecords = {}
+        const outDir = dir ?? join(cwd(), 'dist')
         const updater = extMap ? getExtMap(extMap) : handler ?? {}
+        const dts = await glob(`${outDir}/**/*.d.ts`, {
+          ignore: 'node_modules/**',
+        })
         const files = Object.keys(bundle)
           .filter(filename => {
-            return /\.js|\.mjs|\.cjs|\.jsx|\.ts|\.mts|\.cts|\.tsx/.test(extname(filename))
+            return /\.(js|mjs|cjs|jsx|ts|mts|cts|tsx)$/.test(filename)
           })
-          .map(filename => join(dir ?? `${join(cwd(), 'dist')}`, filename))
+          .map(filename => join(outDir, filename))
+          .concat(dts)
 
         for (const filename of files) {
           const update = await specifier.update(filename, updater)
@@ -93,15 +100,29 @@ export default function (options: SpecifierOptions): Plugin {
           const files = Object.keys(records)
 
           for (const filename of files) {
-            const fileExt = extname(filename) as Ext
+            const fileIsDec = /\.d\.ts$/.test(filename)
+            const fileExt = fileIsDec ? '.d.ts' : (extname(filename) as Ext)
             const newExt = extMap[fileExt] ?? ''
             const { code, error } = records[filename]
 
             if (!error && newExt) {
-              await writeFile(
-                filename.replace(new RegExp(`\\${fileExt}$`, 'i'), newExt),
-                code,
-              )
+              // Check for .d.ts files being converted to .d.mts and .d.cts
+              if (newExt === 'dual') {
+                await writeFile(filename.replace(/\.d\.ts$/i, '.d.mts'), code)
+                await writeFile(filename.replace(/\.d\.ts$/i, '.d.cts'), code)
+              } else {
+                await writeFile(
+                  filename.replace(
+                    new RegExp(
+                      `${fileIsDec ? fileExt.split('.').join('\\.') : `\\${fileExt}`}$`,
+                      'i',
+                    ),
+                    newExt,
+                  ),
+                  code,
+                )
+              }
+
               await rm(filename, { force: true })
             }
           }
