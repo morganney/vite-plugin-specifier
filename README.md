@@ -207,7 +207,7 @@ resolve: {
 type Map = Record<string, string>
 ```
 
-An object tha maps one specifier to another. If any specifier matches a map's key, the corresponding value will be used to update the specifier.
+An object that maps one string to another. If any specifier matches a `map`'s key, the corresponding value will be used to update the specifier.
 
 ### `extMap`
 
