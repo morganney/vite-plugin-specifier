@@ -178,8 +178,6 @@ Besides the unique value `dual`, you can also map `.d.ts` to either `.mjs` or `.
 
 ## Options
 
-You probably won't need to use any of these except `extMap`, nevertheless, here they are. To make anything happen you need to define either `extMap`, `handler`, or `writer`.
-
 ### `hook`
 
 **type**
@@ -202,27 +200,36 @@ resolve: {
 },
 ```
 
+### `map`
+
+**type**
+```ts
+type Map = Record<string, string>
+```
+
+An object tha maps one specifier to another. If any specifier matches a map's key, the corresponding value will be used to update the specifier.
+
 ### `extMap`
 
 **type**
 ```ts
 type ExtMap = Map<{
-  '.js': Ext
-  '.mjs': Ext
-  '.cjs': Ext
-  '.jsx': Ext
-  '.ts': Ext
-  '.mts': Ext
-  '.cts': Ext
-  '.tsx': Ext
+  '.js': '.mjs' | '.cjs'
+  '.mjs': '.js'
+  '.cjs': '.js'
+  '.jsx': '.js' | '.mjs' | '.cjs'
+  '.ts': '.js' | '.mjs' | '.cjs'
+  '.mts': '.mjs' | '.js'
+  '.cts': '.cjs' | '.js'
+  '.tsx': '.js' | '.mjs' | '.cjs'
+  '.d.ts': '.mjs' | '.cjs' | 'dual'
 }>
-type Ext = '.js' | '.mjs' | '.cjs' | '.jsx' | '.ts' | '.mts' | '.cts' | '.tsx'
 type Map<Exts> = {
   [P in keyof Exts]?: Exts[P]
 }
 ```
 
-An object of common file extensions mapping one extension to another. Using this option allows you to easily change one extension into another for relative specifiers and their associated files.
+An object of common file extensions mapping one extension to another. Using this option allows you to easily change one extension into another for **relative specifiers and their associated files**.
 
 
 ### `handler`

@@ -26,6 +26,10 @@ type Map<Exts> = {
 type BundleRecords = Record<string, { error: UpdateError | undefined; code: string }>
 interface SpecifierOptions {
   /**
+   * Maps the key to the value if key equals a specifier.
+   */
+  map?: Record<string, string>
+  /**
    * Maps one extension to another in specifiers and emitted filenames.
    * Use of `extMap` superscedes `handler` or `writer` if either is defined.
    */
@@ -54,7 +58,13 @@ const getExtMap = (extMap: Map<Extensions>): RegexMap => {
   return map
 }
 export default function (options: SpecifierOptions): Plugin {
-  const { handler, extMap, hook = 'writeBundle', writer = false } = options
+  const {
+    handler,
+    extMap,
+    map: specifierMap,
+    hook = 'writeBundle',
+    writer = false,
+  } = options
 
   return {
     name: 'specifier',
@@ -110,7 +120,6 @@ export default function (options: SpecifierOptions): Plugin {
             if (!error && newExt) {
               // Check for .d.ts files being converted to .d.mts and .d.cts.
               if (newExt === 'dual') {
-                // Assume '.js' mapping determines target and which declaration file was already transformed if dual is used.
                 const isCjs = extMap['.js'] === '.mjs'
                 const targetExt = isCjs ? '.cjs' : '.mjs'
                 const { code: dual } = await specifier.update(filename, ({ value }) => {
@@ -148,13 +157,7 @@ export default function (options: SpecifierOptions): Plugin {
                 }
               } else {
                 await writeFile(
-                  filename.replace(
-                    new RegExp(
-                      `${fileIsDec ? fileExt.split('.').join('\\.') : `\\${fileExt}`}$`,
-                      'i',
-                    ),
-                    newExt,
-                  ),
+                  filename.replace(new RegExp(`\\${fileExt}$`, 'i'), newExt),
                   code,
                 )
               }
@@ -162,20 +165,49 @@ export default function (options: SpecifierOptions): Plugin {
               await rm(filename, { force: true })
             }
           }
-        } else {
-          if (writer === true) {
-            const files = Object.keys(records)
+        }
 
-            for (const filename of files) {
-              if (!records[filename].error) {
-                await writeFile(filename, records[filename].code)
+        if (specifierMap) {
+          const map = new Map(Object.entries(specifierMap))
+
+          for (const filename of files) {
+            if (!records[filename].error) {
+              const { code, error } = await specifier.updateSrc(
+                records[filename].code,
+                ({ value }) => {
+                  if (map.has(value)) {
+                    return map.get(value)
+                  }
+                },
+              )
+
+              if (code && !error) {
+                const ext = extname(filename) as Ext
+                const newExt = extMap ? extMap[ext] ?? false : false
+
+                await writeFile(
+                  newExt
+                    ? filename.replace(new RegExp(`\\${ext}$`, 'i'), newExt)
+                    : filename,
+                  code,
+                )
               }
             }
           }
+        }
 
-          if (typeof writer === 'function') {
-            await writer(records)
+        if (writer === true) {
+          const files = Object.keys(records)
+
+          for (const filename of files) {
+            if (!records[filename].error) {
+              await writeFile(filename, records[filename].code)
+            }
           }
+        }
+
+        if (typeof writer === 'function') {
+          await writer(records)
         }
       }
     },
