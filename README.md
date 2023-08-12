@@ -1,6 +1,7 @@
 # [`vite-plugin-specifier`](https://www.npmjs.com/package/vite-plugin-specifier)
 
 ![CI](https://github.com/morganney/vite-plugin-specifier/actions/workflows/ci.yml/badge.svg)
+[![codecov](https://codecov.io/gh/morganney/vite-plugin-specifier/branch/main/graph/badge.svg?token=HGIBWFXW98)](https://codecov.io/gh/morganney/vite-plugin-specifier)
 [![NPM version](https://img.shields.io/npm/v/vite-plugin-specifier.svg)](https://www.npmjs.com/package/vite-plugin-specifier)
 
 Vite plugin to update your ESM and CJS specifiers.
@@ -187,7 +188,7 @@ type Hook = 'writeBundle' | 'transform'
 
 Determines what [vite build hook](https://vitejs.dev/guide/api-plugin.html#universal-hooks) this plugin runs under. By default, this plugin runs after the vite build is finished writing files, during the [`writeBundle`](https://rollupjs.org/plugin-development/#writebundle) hook.
 
-I'm not sure why you would ever need to run this plugin under [`transform`](https://rollupjs.org/plugin-development/#transform), but if you do you will most likely need to include some sort of `resolve.alias` configuration to remap the changed specifier extensions. For example, running the example above under `transform` would require this added to the vite.config.ts:
+If you run this plugin under [`transform`](https://rollupjs.org/plugin-development/#transform), then depending on what you're doing you might need to include some sort of `resolve.alias` configuration to remap the changed specifier extensions. For example, running the example above under `transform` would require this added to the vite.config.ts:
 
 ```ts
 resolve: {

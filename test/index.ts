@@ -30,6 +30,11 @@ describe('vite-plugin-specifier', () => {
           entry: ['file.ts', 'bar.ts', 'foo.ts'],
           formats: ['es'],
         },
+        rollupOptions: {
+          output: {
+            exports: 'named',
+          },
+        },
       },
       plugins: [
         viteSpecifier({
@@ -62,6 +67,11 @@ describe('vite-plugin-specifier', () => {
           entry: ['file.ts', 'bar.ts', 'foo.ts'],
           formats: ['es', 'cjs'],
         },
+        rollupOptions: {
+          output: {
+            exports: 'named',
+          },
+        },
       },
       plugins: [
         viteSpecifier({
@@ -92,6 +102,11 @@ describe('vite-plugin-specifier', () => {
         lib: {
           entry: ['file.ts', 'bar.ts', 'foo.ts'],
           formats: ['es'],
+        },
+        rollupOptions: {
+          output: {
+            exports: 'named',
+          },
         },
       },
       plugins: [
@@ -129,6 +144,11 @@ describe('vite-plugin-specifier', () => {
         lib: {
           entry: ['file.ts', 'bar.ts', 'foo.ts'],
           formats: ['es', 'cjs'],
+        },
+        rollupOptions: {
+          output: {
+            exports: 'named',
+          },
         },
         emptyOutDir: false,
       },
@@ -173,6 +193,11 @@ describe('vite-plugin-specifier', () => {
           entry: ['file.ts', 'bar.ts', 'foo.ts'],
           formats: ['es'],
         },
+        rollupOptions: {
+          output: {
+            exports: 'named',
+          },
+        },
         emptyOutDir: false,
       },
       plugins: [
@@ -194,5 +219,42 @@ describe('vite-plugin-specifier', () => {
     assert.ok(file.indexOf('./bar.mjs') > -1)
     assert.ok(fileMts.indexOf('./foo.mjs') > -1)
     assert.ok(fileMts.indexOf('./bar.mjs') > -1)
+  })
+
+  it('can run during the transform hook', async t => {
+    t.after(async () => {
+      await rm(dist, { force: true, recursive: true })
+    })
+
+    await build({
+      root: join(__dirname, '__fixtures__'),
+      build: {
+        lib: {
+          entry: ['file.ts', 'bar.ts', 'foo.ts', 'test.ts', 'baz.ts'],
+          formats: ['es'],
+        },
+        rollupOptions: {
+          output: {
+            exports: 'named',
+          },
+        },
+      },
+      plugins: [
+        viteSpecifier({
+          hook: 'transform',
+          handler({ value }) {
+            if (value === './test.js') {
+              return './baz.js'
+            }
+          },
+        }),
+      ],
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 50))
+
+    const file = (await readFile(join(dist, 'file.js'))).toString()
+
+    assert.ok(file.indexOf('./baz.js') > -1)
   })
 })

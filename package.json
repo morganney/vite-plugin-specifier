@@ -1,7 +1,7 @@
 {
   "name": "vite-plugin-specifier",
-  "version": "1.0.0-rc.0",
-  "description": "Vite plugin to update your ESM or CJS specifiers.",
+  "version": "1.0.0-rc.1",
+  "description": "Vite plugin to update your ESM and CJS specifiers.",
   "type": "module",
   "main": "dist",
   "exports": {
@@ -65,12 +65,7 @@
     "singleQuote": true
   },
   "dependencies": {
-    "@knighted/specifier": "^1.0.0-rc.3",
+    "@knighted/specifier": "^1.0.0-rc.4",
     "glob": "^10.3.3"
-  },
-  "overrides": {
-    "@knighted/duel": {
-      "@knighted/specifier": "1.0.0-rc.2"
-    }
   }
 }
