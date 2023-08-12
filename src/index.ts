@@ -18,7 +18,7 @@ interface Extensions {
   '.mts': '.mjs' | '.js'
   '.cts': '.cjs' | '.js'
   '.tsx': '.js' | '.mjs' | '.cjs'
-  '.d.ts': '.mjs' | '.cjs' | 'dual'
+  '.d.ts': '.d.mts' | '.d.cts' | 'dual'
 }
 type Map<Exts> = {
   [P in keyof Exts]?: Exts[P]
@@ -31,7 +31,8 @@ interface SpecifierOptions {
   map?: Record<string, string>
   /**
    * Maps one extension to another in specifiers and emitted filenames.
-   * Use of `extMap` superscedes `handler` or `writer` if either is defined.
+   * If you define a `writer` in addition to `extMap`, then the writer
+   * operates on files already updated by the `extMap` default writer.
    */
   extMap?: Map<Extensions>
   handler?: Callback | RegexMap
@@ -39,7 +40,9 @@ interface SpecifierOptions {
    * If `true`, default writer will be used which rewrites the updated
    * code back to the original filename in `outDir`.
    *
-   * Otherwise, a callback will be passed BundleRecords.
+   * Otherwise, a callback will be passed `BundleRecords`. The writer
+   * defined here operates after any default writer from an `extMap`,
+   * or `map` definition.
    */
   writer?: ((records: BundleRecords) => Promise<void>) | boolean
   hook?: 'writeBundle' | 'transform'
@@ -94,7 +97,7 @@ export default function (options: SpecifierOptions): Plugin {
         })
         const files = Object.keys(bundle)
           .filter(filename => {
-            return /\.(js|mjs|cjs|jsx|ts|mts|cts|tsx)$/.test(filename)
+            return /\.(js|mjs|cjs)$/.test(filename)
           })
           .map(filename => join(outDir, filename))
           .concat(dts)
@@ -140,21 +143,7 @@ export default function (options: SpecifierOptions): Plugin {
                   code,
                 )
               } else if (fileIsDec) {
-                const update = await specifier.update(filename, ({ value }) => {
-                  if (value.startsWith('./') || value.startsWith('../')) {
-                    return value.replace(/(.+)\.(?:js|mjs|cjs)$/, `$1${newExt}`)
-                  }
-                })
-
-                if (update.code) {
-                  await writeFile(
-                    filename.replace(
-                      /\.d\.ts$/i,
-                      newExt === '.mjs' ? '.d.mts' : '.d.cts',
-                    ),
-                    update.code,
-                  )
-                }
+                await writeFile(filename.replace(/\.d\.ts$/i, newExt), code)
               } else {
                 await writeFile(
                   filename.replace(new RegExp(`\\${fileExt}$`, 'i'), newExt),

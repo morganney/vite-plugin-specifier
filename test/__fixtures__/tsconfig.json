@@ -1,10 +1,10 @@
 {
   "compilerOptions": {
     "declaration": true,
+    "declarationDir": "dist",
+    "emitDeclarationOnly": true,
     "module": "NodeNext",
-    "outDir": "dist",
-    "removeComments": true,
     "strict": true
   },
-  "include": ["src"]
+  "include": ["*.ts"]
 }

@@ -222,7 +222,7 @@ type ExtMap = Map<{
   '.mts': '.mjs' | '.js'
   '.cts': '.cjs' | '.js'
   '.tsx': '.js' | '.mjs' | '.cjs'
-  '.d.ts': '.mjs' | '.cjs' | 'dual'
+  '.d.ts': '.d.mts' | '.d.cts' | 'dual'
 }>
 type Map<Exts> = {
   [P in keyof Exts]?: Exts[P]
