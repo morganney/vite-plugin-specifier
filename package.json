@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-specifier",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "description": "Vite plugin to update your ESM and CJS specifiers.",
   "type": "module",
   "main": "dist",
@@ -45,7 +45,7 @@
     "url": "https://github.com/morganney/vite-plugin-specifier/issues"
   },
   "devDependencies": {
-    "@knighted/duel": "^1.0.0-rc.11",
+    "@knighted/duel": "^1.0.1",
     "@types/node": "^20.4.8",
     "@typescript-eslint/eslint-plugin": "^6.2.1",
     "@typescript-eslint/parser": "^6.2.1",
@@ -55,6 +55,10 @@
     "tsx": "^3.12.7",
     "typescript": "^5.3.0-dev.20230808"
   },
+  "dependencies": {
+    "@knighted/specifier": "^1.0.1",
+    "glob": "^10.3.3"
+  },
   "peerDependencies": {
     "vite": "^4.4.8"
   },
@@ -63,9 +67,5 @@
     "printWidth": 90,
     "semi": false,
     "singleQuote": true
-  },
-  "dependencies": {
-    "@knighted/specifier": "^1.0.0-rc.4",
-    "glob": "^10.3.3"
   }
 }
