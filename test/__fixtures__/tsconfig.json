@@ -4,7 +4,7 @@
     "declarationDir": "dist",
     "emitDeclarationOnly": true,
     "module": "NodeNext",
-    "strict": true
+    "strict": true,
   },
-  "include": ["*.ts"]
+  "include": ["*.ts"],
 }
