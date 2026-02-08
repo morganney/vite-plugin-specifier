@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-specifier",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "Vite plugin to update your ESM and CJS specifiers.",
   "type": "module",
   "main": "dist",
@@ -12,12 +12,16 @@
     }
   },
   "types": "./dist/cjs/index.d.cts",
+  "engines": {
+    "node": ">=22.21.1"
+  },
   "scripts": {
-    "prettier": "prettier -w {src,test}/*",
+    "prettier": "prettier -w .",
     "lint": "eslint . src --ext .ts",
     "test": "c8 --reporter=text --reporter=text-summary --reporter=lcov node --no-warnings --import tsx --test --test-reporter=spec test/*.ts",
     "prebuild": "rm -rf ./dist",
     "build": "duel",
+    "types-check": "tsc --noEmit",
     "prepack": "npm run build"
   },
   "keywords": [
@@ -45,22 +49,24 @@
     "url": "https://github.com/morganney/vite-plugin-specifier/issues"
   },
   "devDependencies": {
-    "@knighted/duel": "^1.0.7",
-    "@types/node": "^20.4.8",
-    "@typescript-eslint/eslint-plugin": "^6.2.1",
-    "@typescript-eslint/parser": "^6.2.1",
-    "c8": "^8.0.1",
-    "eslint": "^8.46.0",
+    "@eslint/js": "^9.39.2",
+    "@knighted/duel": "^4.0.0",
+    "@types/node": "^25.2.1",
+    "c8": "^10.1.3",
+    "eslint": "^9.39.2",
+    "globals": "^17.3.0",
     "prettier": "^3.2.4",
-    "tsx": "^4.7.2",
-    "typescript": "^5.4.3"
+    "rollup": "^4.57.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.54.0"
   },
   "dependencies": {
-    "@knighted/specifier": "^1.0.1",
-    "glob": "^10.3.3"
+    "@knighted/specifier": "^2.0.9",
+    "glob": "^13.0.1"
   },
   "peerDependencies": {
-    "vite": ">=4.4.8"
+    "vite": ">=7.3.1"
   },
   "prettier": {
     "arrowParens": "avoid",

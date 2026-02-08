@@ -30,7 +30,7 @@ You can [build a library](https://vitejs.dev/guide/build.html#library-mode) in b
 import { defineConfig } from 'vite'
 import specifier from 'vite-plugin-specifier'
 
-export default defineConfig(({
+export default defineConfig({
   build: {
     lib: {
       formats: ['es', 'cjs'],
@@ -44,7 +44,7 @@ export default defineConfig(({
       },
     }),
   ],
-}))
+})
 ```
 
 After running the vite build, all **relative** specifiers ending in `.js` would be updated to end in `.mjs`, and your `dist` would contain the following:
@@ -101,8 +101,8 @@ export default defineConfig(({
 +        const files = Object.keys(records)
 +
 +        for (const filename of files) {
-+          if (typeof records[filename] === 'string' && filename.endsWith('.js')) {
-+            await writeFile(filename.replace(/\.js$/, '.mjs'), records[filename])
++          if (!records[filename].error && filename.endsWith('.js')) {
++            await writeFile(filename.replace(/\.js$/, '.mjs'), records[filename].code)
 +            await rm(filename, { force: true })
 +          }
 +        }
@@ -176,12 +176,12 @@ After running the vite build, the `.d.ts` files will have been transformed twice
 
 Besides the unique value `dual`, you can also map `.d.ts` to either `.mjs` or `.cjs` if you are not running vite with multiple [`build.lib.formats`](https://vitejs.dev/config/build-options.html#build-lib). It will do what you expect, i.e. update the relative specifiers and output the declaration files with correct extensions.
 
-
 ## Options
 
 ### `hook`
 
 **type**
+
 ```ts
 type Hook = 'writeBundle' | 'transform'
 ```
@@ -204,6 +204,7 @@ resolve: {
 ### `map`
 
 **type**
+
 ```ts
 type Map = Record<string, string>
 ```
@@ -213,6 +214,7 @@ An object that maps one string to another. If any specifier matches a `map`'s ke
 ### `extMap`
 
 **type**
+
 ```ts
 type ExtMap = Map<{
   '.js': '.mjs' | '.cjs'
@@ -232,22 +234,29 @@ type Map<Exts> = {
 
 An object of common file extensions mapping one extension to another. Using this option allows you to easily change one extension into another for **relative specifiers and their associated files**.
 
-
 ### `handler`
 
 **type**
+
 ```ts
 type Handler = Callback | RegexMap
-type Callback = (spec: Spec) => string
+type Callback = (spec: Spec) => string | void
 interface RegexMap {
   [regex: string]: string
 }
 interface Spec {
   type: 'StringLiteral' | 'TemplateLiteral' | 'BinaryExpression' | 'NewExpression'
+  node: StringLiteral | TemplateLiteral | BinaryExpression | NewExpression
+  parent:
+    | CallExpression
+    | ImportDeclaration
+    | ExportNamedDeclaration
+    | ExportAllDeclaration
+    | ImportExpression
+    | TSImportType
   start: number
   end: number
   value: string
-  loc: SourceLocation
 }
 ```
 
@@ -256,18 +265,11 @@ Allows updating of specifiers on a per-file basis, using a callback or regular e
 ### `writer`
 
 **type**
+
 ```ts
 type Writer = ((records: BundleRecords) => Promise<void>) | boolean
 type BundleRecords = Record<string, { error: UpdateError | undefined; code: string }>
-interface UpdateError {
-  error: boolean
-  msg: string
-  filename?: string
-  syntaxError?: {
-    code: string
-    reasonCode: string
-  }
-}
+type UpdateError = Error
 ```
 
 Used to modify the emitted build files, for instance to change their file extensions. Receives a `BundleRecords` object mapping the filenames from the emitted build, to their updated source code string, or an object describing an error that occured.
