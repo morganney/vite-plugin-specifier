@@ -6,9 +6,10 @@ import { specifier } from '@knighted/specifier'
 import { glob } from 'glob'
 
 import type { Plugin } from 'vite' assert { 'resolution-mode': 'import' }
-import type { Callback, RegexMap, UpdateError, Spec } from '@knighted/specifier'
+import type { Spec } from '@knighted/specifier'
 
 type Ext = '.js' | '.mjs' | '.cjs'
+type ParserLang = 'js' | 'ts' | 'jsx' | 'tsx'
 interface Extensions {
   '.js': '.mjs' | '.cjs'
   '.mjs': '.js'
@@ -24,6 +25,10 @@ type Map<Exts> = {
   [P in keyof Exts]?: Exts[P]
 }
 type BundleRecords = Record<string, { error: UpdateError | undefined; code: string }>
+type RegexMap = Record<string, string>
+type Callback = (spec: Spec) => string | void
+type UpdateError = Error
+type Updater = Callback | RegexMap
 interface SpecifierOptions {
   /**
    * Maps the key to the value if key equals a specifier.
@@ -35,7 +40,7 @@ interface SpecifierOptions {
    * operates on files already updated by the `extMap` default writer.
    */
   extMap?: Map<Extensions>
-  handler?: Callback | RegexMap
+  handler?: Updater
   /**
    * If `true`, default writer will be used which rewrites the updated
    * code back to the original filename in `outDir`.
@@ -60,6 +65,40 @@ const getExtMap = (extMap: Map<Extensions>): RegexMap => {
 
   return map
 }
+
+const getLang = (filename: string): ParserLang => {
+  if (/\.(d\.)?(m|c)?ts$/i.test(filename)) {
+    return 'ts'
+  }
+
+  if (/\.tsx$/i.test(filename)) {
+    return 'tsx'
+  }
+
+  if (/\.jsx$/i.test(filename)) {
+    return 'jsx'
+  }
+
+  return 'js'
+}
+
+const toCallback = (updater: Updater): Callback => {
+  if (typeof updater === 'function') {
+    return updater
+  }
+
+  const entries = Object.entries(updater)
+
+  return ({ value }) => {
+    for (const [pattern, replacement] of entries) {
+      const regex = new RegExp(pattern)
+
+      if (regex.test(value)) {
+        return value.replace(regex, replacement)
+      }
+    }
+  }
+}
 export default function (options: SpecifierOptions): Plugin {
   const {
     handler,
@@ -75,13 +114,13 @@ export default function (options: SpecifierOptions): Plugin {
     async transform(src, id) {
       if (hook === 'transform') {
         const updater = extMap ? getExtMap(extMap) : handler ?? {}
-        const { code, error, map } = await specifier.updateSrc(src, updater, {
-          sourceMap: true,
-          dts: /\.d\.[mc]?ts$/.test(id),
-        })
 
-        if (code && map && !error) {
-          return { code, map }
+        try {
+          const code = await specifier.updateSrc(src, getLang(id), toCallback(updater))
+
+          return { code, map: null }
+        } catch {
+          return { code: src, map: null }
         }
       }
 
@@ -92,6 +131,7 @@ export default function (options: SpecifierOptions): Plugin {
         const records: BundleRecords = {}
         const outDir = dir ?? join(cwd(), 'dist')
         const updater = extMap ? getExtMap(extMap) : handler ?? {}
+        const callback = toCallback(updater)
         const dts = await glob(`${outDir}/**/*.d.ts`, {
           ignore: 'node_modules/**',
         })
@@ -103,11 +143,19 @@ export default function (options: SpecifierOptions): Plugin {
           .concat(dts)
 
         for (const filename of files) {
-          const update = await specifier.update(filename, updater)
+          try {
+            const code = await specifier.update(filename, callback)
 
-          records[filename] = {
-            code: update.code ?? '',
-            error: update.error,
+            records[filename] = {
+              code,
+              error: undefined,
+            }
+          } catch (error) {
+            records[filename] = {
+              code: '',
+              error:
+                error instanceof Error ? error : new Error('Specifier update failed'),
+            }
           }
         }
 
@@ -125,18 +173,16 @@ export default function (options: SpecifierOptions): Plugin {
               if (newExt === 'dual') {
                 const isCjs = extMap['.js'] === '.mjs'
                 const targetExt = isCjs ? '.cjs' : '.mjs'
-                const { code: dual } = await specifier.update(filename, ({ value }) => {
+                const dual = await specifier.update(filename, ({ value }) => {
                   if (value.startsWith('./') || value.startsWith('../')) {
                     return value.replace(/(.+)\.(?:js|mjs|cjs)$/, `$1${targetExt}`)
                   }
                 })
 
-                if (dual) {
-                  await writeFile(
-                    filename.replace(/\.d\.ts$/i, isCjs ? '.d.cts' : '.d.mts'),
-                    dual,
-                  )
-                }
+                await writeFile(
+                  filename.replace(/\.d\.ts$/i, isCjs ? '.d.cts' : '.d.mts'),
+                  dual,
+                )
 
                 await writeFile(
                   filename.replace(/\.d\.ts$/i, isCjs ? '.d.mts' : '.d.cts'),
@@ -161,16 +207,17 @@ export default function (options: SpecifierOptions): Plugin {
 
           for (const filename of files) {
             if (!records[filename].error) {
-              const { code, error } = await specifier.updateSrc(
-                records[filename].code,
-                ({ value }) => {
-                  if (map.has(value)) {
-                    return map.get(value)
-                  }
-                },
-              )
+              try {
+                const code = await specifier.updateSrc(
+                  records[filename].code,
+                  getLang(filename),
+                  ({ value }) => {
+                    if (map.has(value)) {
+                      return map.get(value)
+                    }
+                  },
+                )
 
-              if (code && !error) {
                 const ext = extname(filename) as Ext
                 const newExt = extMap ? extMap[ext] ?? false : false
 
@@ -180,6 +227,8 @@ export default function (options: SpecifierOptions): Plugin {
                     : filename,
                   code,
                 )
+              } catch {
+                continue
               }
             }
           }

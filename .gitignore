@@ -1,4 +1,5 @@
 *.tgz
+.duel-cache
 dist
 node_modules
 coverage

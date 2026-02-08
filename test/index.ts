@@ -2,14 +2,21 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, join } from 'node:path'
-import { readFile, rm } from 'node:fs/promises'
+import { readFile, rm, writeFile, mkdir } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { cwd } from 'node:process'
 import { existsSync } from 'node:fs'
 
 import { build } from 'vite'
+import type {
+  PluginContext,
+  TransformPluginContext,
+  NormalizedOutputOptions,
+  OutputBundle,
+} from 'rollup'
 
 import viteSpecifier from '../src/index.js'
+import { specifier } from '@knighted/specifier'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -256,5 +263,139 @@ describe('vite-plugin-specifier', () => {
     const file = (await readFile(join(dist, 'file.js'))).toString()
 
     assert.ok(file.indexOf('./baz.js') > -1)
+  })
+
+  it('covers transform language detection and error recovery', async () => {
+    const plugin = viteSpecifier({
+      hook: 'transform',
+      handler: {},
+    })
+
+    const transformHook = plugin.transform
+    const transform =
+      typeof transformHook === 'function' ? transformHook : transformHook?.handler
+
+    assert.ok(transform)
+
+    const tsxSource = 'export const el = <div />'
+    const jsxSource = 'export const el = <div />'
+
+    const transformContext = {} as unknown as TransformPluginContext
+    const tsxResult = await transform.call(
+      transformContext,
+      tsxSource,
+      join(__dirname, 'inline.tsx'),
+    )
+    const jsxResult = await transform.call(
+      transformContext,
+      jsxSource,
+      join(__dirname, 'inline.jsx'),
+    )
+
+    const tsxCode = typeof tsxResult === 'string' ? tsxResult : tsxResult?.code
+    const jsxCode = typeof jsxResult === 'string' ? jsxResult : jsxResult?.code
+
+    assert.equal(tsxCode, tsxSource)
+    assert.equal(jsxCode, jsxSource)
+
+    const originalUpdateSrc = specifier.updateSrc
+
+    specifier.updateSrc = async () => {
+      throw new Error('transform-failure')
+    }
+
+    const errorResult = await transform.call(
+      transformContext,
+      'export const x = 1',
+      join(__dirname, 'err.js'),
+    )
+
+    const errorCode = typeof errorResult === 'string' ? errorResult : errorResult?.code
+
+    assert.equal(errorCode, 'export const x = 1')
+
+    specifier.updateSrc = originalUpdateSrc
+  })
+
+  it('handles update failures, map errors, and writer callbacks', async t => {
+    const tmpDir = join(fixtures, 'tmp-write-bundle')
+    const originalUpdate = specifier.update
+    const originalUpdateSrc = specifier.updateSrc
+
+    t.after(async () => {
+      await rm(tmpDir, { force: true, recursive: true })
+      specifier.update = originalUpdate
+      specifier.updateSrc = originalUpdateSrc
+    })
+
+    await rm(tmpDir, { force: true, recursive: true })
+    await mkdir(tmpDir, { recursive: true })
+
+    await writeFile(
+      join(tmpDir, 'ok.js'),
+      `import './foo.js'
+  export const ok = 1`,
+    )
+    await writeFile(
+      join(tmpDir, 'fail-map.js'),
+      `import './foo.js'
+  export const fail = 1`,
+    )
+    await writeFile(join(tmpDir, 'throws.js'), 'export const bad = 1')
+
+    let writerCalled = false
+
+    specifier.update = async (filename, callback) => {
+      if (filename.endsWith('throws.js')) {
+        throw new Error('update-failure')
+      }
+
+      if (filename.endsWith('fail-map.js')) {
+        return 'throw-map'
+      }
+
+      return originalUpdate(filename, callback)
+    }
+
+    specifier.updateSrc = async (code, lang, callback) => {
+      if (code.includes('throw-map')) {
+        throw new Error('map-failure')
+      }
+
+      return originalUpdateSrc(code, lang, callback)
+    }
+
+    const plugin = viteSpecifier({
+      extMap: {
+        '.js': '.mjs',
+      },
+      map: {
+        './foo.mjs': './bar.mjs',
+      },
+      writer: async () => {
+        writerCalled = true
+      },
+    })
+
+    const writeBundleHook = plugin.writeBundle
+    const writeBundle =
+      typeof writeBundleHook === 'function' ? writeBundleHook : writeBundleHook?.handler
+
+    const writeBundleContext = {} as unknown as PluginContext
+    const outputOptions = { dir: tmpDir } as unknown as NormalizedOutputOptions
+    const outputBundle = {
+      'ok.js': {},
+      'fail-map.js': {},
+      'throws.js': {},
+    } as unknown as OutputBundle
+
+    await writeBundle?.call(writeBundleContext, outputOptions, outputBundle)
+
+    assert.ok(writerCalled)
+    assert.ok(existsSync(join(tmpDir, 'ok.mjs')))
+
+    const okContent = (await readFile(join(tmpDir, 'ok.mjs'))).toString()
+
+    assert.ok(okContent.includes('./bar.mjs'))
   })
 })
