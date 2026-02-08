@@ -15,7 +15,7 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ['dist/**', 'coverage/**', 'test/__fixtures__/**']
+    ignores: ['dist/**', 'coverage/**', 'test/__fixtures__/**'],
   },
   {
     files: ['**/*.{js,mjs,cjs}'],

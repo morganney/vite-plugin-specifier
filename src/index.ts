@@ -173,21 +173,28 @@ export default function (options: SpecifierOptions): Plugin {
               if (newExt === 'dual') {
                 const isCjs = extMap['.js'] === '.mjs'
                 const targetExt = isCjs ? '.cjs' : '.mjs'
-                const dual = await specifier.update(filename, ({ value }) => {
-                  if (value.startsWith('./') || value.startsWith('../')) {
-                    return value.replace(/(.+)\.(?:js|mjs|cjs)$/, `$1${targetExt}`)
-                  }
-                })
 
-                await writeFile(
-                  filename.replace(/\.d\.ts$/i, isCjs ? '.d.cts' : '.d.mts'),
-                  dual,
-                )
+                try {
+                  const dual = await specifier.update(filename, ({ value }) => {
+                    if (value.startsWith('./') || value.startsWith('../')) {
+                      return value.replace(/(.+)\.(?:js|mjs|cjs)$/, `$1${targetExt}`)
+                    }
+                  })
 
-                await writeFile(
-                  filename.replace(/\.d\.ts$/i, isCjs ? '.d.mts' : '.d.cts'),
-                  code,
-                )
+                  await writeFile(
+                    filename.replace(/\.d\.ts$/i, isCjs ? '.d.cts' : '.d.mts'),
+                    dual,
+                  )
+
+                  await writeFile(
+                    filename.replace(/\.d\.ts$/i, isCjs ? '.d.mts' : '.d.cts'),
+                    code,
+                  )
+                } catch (error) {
+                  records[filename].error =
+                    error instanceof Error ? error : new Error('Specifier update failed')
+                  continue
+                }
               } else if (fileIsDec) {
                 await writeFile(filename.replace(/\.d\.ts$/i, newExt), code)
               } else {
@@ -218,12 +225,15 @@ export default function (options: SpecifierOptions): Plugin {
                   },
                 )
 
-                const ext = extname(filename) as Ext
+                const fileIsDec = /\.d\.ts$/i.test(filename)
+                const ext = fileIsDec ? '.d.ts' : (extname(filename) as Ext)
                 const newExt = extMap ? extMap[ext] ?? false : false
 
                 await writeFile(
                   newExt
-                    ? filename.replace(new RegExp(`\\${ext}$`, 'i'), newExt)
+                    ? fileIsDec
+                      ? filename.replace(/\.d\.ts$/i, newExt)
+                      : filename.replace(new RegExp(`\\${ext}$`, 'i'), newExt)
                     : filename,
                   code,
                 )

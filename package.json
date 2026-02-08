@@ -16,7 +16,7 @@
     "node": ">=22.21.1"
   },
   "scripts": {
-    "prettier": "prettier -w {src,test}/*",
+    "prettier": "prettier -w .",
     "lint": "eslint . src --ext .ts",
     "test": "c8 --reporter=text --reporter=text-summary --reporter=lcov node --no-warnings --import tsx --test --test-reporter=spec test/*.ts",
     "prebuild": "rm -rf ./dist",

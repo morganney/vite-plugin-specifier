@@ -182,6 +182,67 @@ describe('vite-plugin-specifier', () => {
     assert.ok(!existsSync(join(dist, 'file.d.ts')))
   })
 
+  it('records errors when dual .d.ts update fails', async t => {
+    t.after(async () => {
+      await rm(dist, { force: true, recursive: true })
+    })
+
+    const { status } = spawnSync(tsc, ['-p', 'test/__fixtures__/tsconfig.json'], {
+      stdio: 'inherit',
+    })
+
+    assert.equal(status, 0)
+
+    const originalUpdate = specifier.update
+    const updateCounts = new Map<string, number>()
+
+    t.after(() => {
+      specifier.update = originalUpdate
+    })
+
+    specifier.update = async (filename, callback) => {
+      if (filename.endsWith('.d.ts')) {
+        const nextCount = (updateCounts.get(filename) ?? 0) + 1
+
+        updateCounts.set(filename, nextCount)
+
+        if (nextCount > 1) {
+          throw new Error('dual-update-failure')
+        }
+      }
+
+      return originalUpdate(filename, callback)
+    }
+
+    await build({
+      root: join(__dirname, '__fixtures__'),
+      build: {
+        lib: {
+          entry: ['file.ts', 'bar.ts', 'foo.ts'],
+          formats: ['es', 'cjs'],
+        },
+        rollupOptions: {
+          output: {
+            exports: 'named',
+          },
+        },
+        emptyOutDir: false,
+      },
+      plugins: [
+        viteSpecifier({
+          extMap: {
+            '.js': '.mjs',
+            '.d.ts': 'dual',
+          },
+        }),
+      ],
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 75))
+
+    assert.ok(existsSync(join(dist, 'file.d.ts')))
+  })
+
   it('supports .d.ts updates', async t => {
     t.after(async () => {
       await rm(dist, { force: true, recursive: true })
@@ -228,6 +289,52 @@ describe('vite-plugin-specifier', () => {
     assert.ok(fileMts.indexOf('./bar.mjs') > -1)
   })
 
+  it('keeps .d.ts mapping during map rewrite', async t => {
+    t.after(async () => {
+      await rm(dist, { force: true, recursive: true })
+    })
+
+    const { status } = spawnSync(tsc, ['-p', 'test/__fixtures__/tsconfig.json'], {
+      stdio: 'inherit',
+    })
+
+    assert.equal(status, 0)
+
+    await build({
+      root: join(__dirname, '__fixtures__'),
+      build: {
+        lib: {
+          entry: ['file.ts', 'bar.ts', 'foo.ts'],
+          formats: ['es'],
+        },
+        rollupOptions: {
+          output: {
+            exports: 'named',
+          },
+        },
+        emptyOutDir: false,
+      },
+      plugins: [
+        viteSpecifier({
+          extMap: {
+            '.js': '.mjs',
+            '.d.ts': '.d.mts',
+          },
+          map: {
+            './foo.mjs': './bar.mjs',
+          },
+        }),
+      ],
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 75))
+
+    const fileMts = (await readFile(join(dist, 'file.d.mts'))).toString()
+
+    assert.ok(fileMts.indexOf('./bar.mjs') > -1)
+    assert.ok(!existsSync(join(dist, 'file.d.ts')))
+  })
+
   it('can run during the transform hook', async t => {
     t.after(async () => {
       await rm(dist, { force: true, recursive: true })
@@ -265,7 +372,7 @@ describe('vite-plugin-specifier', () => {
     assert.ok(file.indexOf('./baz.js') > -1)
   })
 
-  it('covers transform language detection and error recovery', async () => {
+  it('covers transform language detection and error recovery', async t => {
     const plugin = viteSpecifier({
       hook: 'transform',
       handler: {},
@@ -300,6 +407,10 @@ describe('vite-plugin-specifier', () => {
 
     const originalUpdateSrc = specifier.updateSrc
 
+    t.after(() => {
+      specifier.updateSrc = originalUpdateSrc
+    })
+
     specifier.updateSrc = async () => {
       throw new Error('transform-failure')
     }
@@ -313,8 +424,6 @@ describe('vite-plugin-specifier', () => {
     const errorCode = typeof errorResult === 'string' ? errorResult : errorResult?.code
 
     assert.equal(errorCode, 'export const x = 1')
-
-    specifier.updateSrc = originalUpdateSrc
   })
 
   it('handles update failures, map errors, and writer callbacks', async t => {
@@ -397,5 +506,39 @@ describe('vite-plugin-specifier', () => {
     const okContent = (await readFile(join(tmpDir, 'ok.mjs'))).toString()
 
     assert.ok(okContent.includes('./bar.mjs'))
+  })
+
+  it('renames non-declaration files via extMap', async t => {
+    const tmpDir = join(fixtures, 'tmp-extmap-rename')
+
+    t.after(async () => {
+      await rm(tmpDir, { force: true, recursive: true })
+    })
+
+    await rm(tmpDir, { force: true, recursive: true })
+    await mkdir(tmpDir, { recursive: true })
+
+    await writeFile(join(tmpDir, 'plain.js'), `export const value = 1`)
+
+    const plugin = viteSpecifier({
+      extMap: {
+        '.js': '.mjs',
+      },
+    })
+
+    const writeBundleHook = plugin.writeBundle
+    const writeBundle =
+      typeof writeBundleHook === 'function' ? writeBundleHook : writeBundleHook?.handler
+
+    const writeBundleContext = {} as unknown as PluginContext
+    const outputOptions = { dir: tmpDir } as unknown as NormalizedOutputOptions
+    const outputBundle = {
+      'plain.js': {},
+    } as unknown as OutputBundle
+
+    await writeBundle?.call(writeBundleContext, outputOptions, outputBundle)
+
+    assert.ok(existsSync(join(tmpDir, 'plain.mjs')))
+    assert.ok(!existsSync(join(tmpDir, 'plain.js')))
   })
 })
